@@ -1,0 +1,16 @@
+# Rust
+core/target*/
+**/*.rs.bk
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/jniLibs/
+android/app/build/generated/
+android/.idea/
+android/*.iml
+android/.kotlin/
+# misc
+.DS_Store
+*.log

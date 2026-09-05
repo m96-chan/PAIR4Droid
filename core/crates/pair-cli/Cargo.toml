@@ -1,0 +1,26 @@
+[package]
+name = "pair-cli"
+description = "Run a PAIR4Droid node on a desktop (Linux/macOS) for development and end-to-end tests against a real PAIR"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "pair4droid"
+path = "src/main.rs"
+
+[features]
+default = []
+llama = ["pair-engine/llama"]
+
+[dependencies]
+pair-protocol.workspace = true
+pair-engine.workspace = true
+pair-telemetry.workspace = true
+pair-node.workspace = true
+tokio.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
