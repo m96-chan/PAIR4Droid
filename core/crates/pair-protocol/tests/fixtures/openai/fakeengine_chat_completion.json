@@ -1,0 +1,1 @@
+{"choices":[{"finish_reason":"stop","index":0,"message":{"content":"ok","role":"assistant"}}],"model":"qwen2.5-7b-instruct","object":"chat.completion"}

@@ -1,0 +1,1 @@
+{"GPUs":[{"name":"RTX 6000","vram_bytes":51539607552,"vram_used_bytes":12884901888,"utilization_percent":42}],"cpu":{"name":"Threadripper","cores":64,"utilization_percent":7},"memory":{"total_bytes":137438953472,"used_bytes":34359738368},"telemetryValid":true,"msSince":137}
