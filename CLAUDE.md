@@ -43,6 +43,8 @@ so cargo's build lock does not serialise everyone.
 
 ## Process rules (TiDD + TDD — non-negotiable)
 
+0. **English everywhere the public sees it**: issues, PRs, comments, commit messages, docs, code comments. This is an OSS project.
+
 1. **Ticket first.** Every change maps to a GitHub Issue in `m96-chan/PAIR4Droid`. No ticket → open one
    (title `<area>: <what>`, labels `phase-N`, `area:<crate>`, `tdd`) before coding.
 2. **Test first.** Write the failing test, run it, watch it fail, then implement, then refactor.
