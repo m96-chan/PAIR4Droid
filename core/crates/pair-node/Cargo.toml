@@ -11,6 +11,7 @@ pair-engine.workspace = true
 pair-telemetry.workspace = true
 axum.workspace = true
 tokio.workspace = true
+reqwest.workspace = true
 tokio-stream.workspace = true
 futures.workspace = true
 tower.workspace = true
@@ -27,5 +28,5 @@ chrono.workspace = true
 parking_lot.workspace = true
 
 [dev-dependencies]
-reqwest.workspace = true
+async-trait.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
