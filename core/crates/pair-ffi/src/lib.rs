@@ -304,12 +304,21 @@ fn build_engine(config: &NodeConfig, models_dir: Option<&Path>) -> Result<Shared
 
 /// Pushes a state change whenever the engine's status moves. `NodeStatus` is
 /// otherwise only observed when Kotlin calls `status()`.
-async fn poll_loop(engine: SharedEngine, ports: BoundPorts, mut stop: watch::Receiver<bool>) {
+///
+/// `initial` is sampled synchronously by the caller *before* this task is
+/// spawned. Sampling it here would race with requests that arrive before the
+/// task first runs (a slow runner already serves a chat request by then), and
+/// the resulting `loaded_model` change would never be reported.
+async fn poll_loop(
+    engine: SharedEngine,
+    ports: BoundPorts,
+    initial: pair_engine::EngineStatus,
+    mut stop: watch::Receiver<bool>,
+) {
     let mut ticker = tokio::time::interval(POLL_INTERVAL);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     ticker.tick().await; // the first tick completes immediately
 
-    let initial = engine.status();
     let mut previous = (initial.loaded_model, initial.active, initial.queued);
     loop {
         tokio::select! {
@@ -398,7 +407,8 @@ fn start_locked(state: &mut State, config: NodeConfig) -> Result<NodeStatus, Pai
 
     let ports = BoundPorts::from(handle.ports());
     let (poll_stop, poll_rx) = watch::channel(false);
-    state.runtime.spawn(poll_loop(Arc::clone(&engine), ports, poll_rx));
+    let initial = engine.status();
+    state.runtime.spawn(poll_loop(Arc::clone(&engine), ports, initial, poll_rx));
 
     state.last_error = None;
     state.running = Some(Running { handle, ports, engine, telemetry, poll_stop });
