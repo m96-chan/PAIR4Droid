@@ -56,19 +56,13 @@ pub struct ChatMessage {
     pub content: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct GenerationParams {
     pub max_tokens: Option<u32>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub stop: Vec<String>,
     pub seed: Option<u64>,
-}
-
-impl Default for GenerationParams {
-    fn default() -> Self {
-        Self { max_tokens: None, temperature: None, top_p: None, stop: Vec::new(), seed: None }
-    }
 }
 
 /// A chat request (messages → assistant reply). `/api/generate` and
