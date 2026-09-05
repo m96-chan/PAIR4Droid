@@ -14,6 +14,12 @@ workstation. Android exposes no GPU/NPU utilisation counter comparable to NVML/D
 `active > 0 ? 100 : 0`, `vram_bytes` = the RAM budget for models, `vram_used_bytes` = bytes of
 the loaded model. `telemetryValid` is true after two CPU samples.
 
+## Verification
+PAIR consumes a manual node's node-info for pressure: `services/nvpair-ui-broker/manualnodes.go:49-62`
+(max over `GPUs[].utilization_percent`) → `services/nvpair-job-scheduler/telemetry.go` (requires
+non-empty `hostUuid`, `telemetryValid:true`, `msSince` ≤ 10 s; PAIR-side EWMA α = 0.35; bands
+40/70/85 % up, 35/65/80 % down). An omitted `utilization_percent` decodes as 0 → band 0 when valid.
+
 ## Consequences
 + Idle phone → 0 % → band 0 (better than neutral). Busy phone → climbs to band 3 → PAIR prefers other owners.
 + Also honest for `/api/ps` and the UI.

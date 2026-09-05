@@ -59,7 +59,10 @@ so cargo's build lock does not serialise everyone.
 - Ports 1234 / 11434 / 14318 are PAIR compile-time constants; defaults never change, tests bind port 0.
 - `GET :11434/` must answer 200 or PAIR marks the Ollama lane down.
 - Unknown model → **404** (PAIR fails over to the next owner on 404). Overload/thermal → 503.
-- Model names are PAIR's exact-match routing key. Advertise names unique in the fleet.
+- Model names are PAIR's routing key (OpenAI lane: exact; Ollama lane: `:latest` is implied when no tag).
+  Advertise names unique in the fleet; accept both `name` and `name:latest` on the Ollama lane.
+- node-info must carry a non-empty `hostUuid`, `telemetryValid:true` and `msSince` ≤ 10 000 or PAIR
+  ignores the telemetry (neutral pressure).
 - `pair-node` depends only on traits (`pair_engine::Engine`, `pair_telemetry::TelemetrySource`); tests inject fakes.
 - Streaming: OpenAI lane = SSE `data: {chunk}\n\n` … `data: [DONE]\n\n`; Ollama lane = NDJSON with final `done:true`.
   Flush every chunk; dropping the HTTP response must cancel the engine stream.
