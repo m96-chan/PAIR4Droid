@@ -1,0 +1,8 @@
+<resources>
+    <!-- Compose owns all real theming (ui/theme/Theme.kt); this XML theme only covers the
+         brief window before setContent runs, so it stays on the platform DayNight theme
+         rather than pulling in a Material Components library dependency we don't need. -->
+    <style name="Theme.PAIR4Droid" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+</resources>

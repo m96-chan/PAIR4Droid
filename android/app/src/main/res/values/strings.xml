@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">PAIR4Droid</string>
+    <string name="notification_channel_name">PAIR node</string>
+</resources>

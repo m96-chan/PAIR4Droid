@@ -1,0 +1,13 @@
+[package]
+name = "pair-protocol"
+description = "Wire types PAIR (NVIDIA Personal AI Router) expects from a node: node-info, OpenAI lane, Ollama lane"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]

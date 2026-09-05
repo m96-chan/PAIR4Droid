@@ -1,0 +1,17 @@
+[package]
+name = "pair-telemetry"
+description = "Device resource telemetry (CPU/memory/thermal/battery/inference load) mapped to PAIR node-info"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+pair-protocol.workspace = true
+tokio.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+serde.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+parking_lot.workspace = true

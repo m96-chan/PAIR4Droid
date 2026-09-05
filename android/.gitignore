@@ -1,0 +1,20 @@
+# Build outputs
+*.iml
+.gradle/
+build/
+app/build/
+local.properties
+
+# Native / FFI build artifacts (see app/build.gradle.kts cargoBuild / generateUniffiBindings)
+app/src/main/jniLibs/
+app/build/generated/uniffi/
+
+# Android Studio
+.idea/
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# OS
+.DS_Store

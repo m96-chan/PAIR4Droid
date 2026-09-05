@@ -1,0 +1,23 @@
+{
+  "GPUs": [
+    {
+      "name": "NVIDIA GeForce RTX 3080",
+      "vram_bytes": 10737418240,
+      "vram_used_bytes": 2147483648,
+      "utilization_percent": 42
+    }
+  ],
+  "telemetryValid": true,
+  "msSince": 137,
+  "cpu": {
+    "name": "AMD Ryzen 9 5900X 12-Core Processor",
+    "cores": 12,
+    "utilization_percent": 7
+  },
+  "memory": {
+    "total_bytes": 34359738368,
+    "used_bytes": 12884901888
+  },
+  "hostUuid": "8661676a-0d1c-4bd3-ac5e-4d370e6f1a9c",
+  "clusterUuid": ""
+}

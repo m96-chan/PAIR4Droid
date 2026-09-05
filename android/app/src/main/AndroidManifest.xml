@@ -1,0 +1,56 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Phase 2 (mDNS `_nvpair-node._tcp` advert, docs/architecture.md "Phase 2 sketch"). -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!--
+      ACCESS_LOCAL_NETWORK is deliberately not requested: that permission gates a client
+      discovering/connecting to services on the LAN. This app is the PAIR node itself — the
+      server other devices on the LAN connect to (docs/architecture.md, CLAUDE.md "Android
+      specifics") — so it does not apply here.
+    -->
+
+    <application
+        android:name=".Pair4DroidApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.PAIR4Droid"
+        android:usesCleartextTraffic="true">
+
+        <!-- cleartext is irrelevant to a server bound to a plain HTTP port, but the app
+             also self-probes its own lanes over http:// (docs/architecture.md "What PAIR
+             sees"), so keep this on rather than special-casing that request. -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.PAIR4Droid">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".service.NodeService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local LLM inference server for NVIDIA PAIR on the user's LAN" />
+        </service>
+
+    </application>
+
+</manifest>

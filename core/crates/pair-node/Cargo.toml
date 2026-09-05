@@ -1,0 +1,32 @@
+[package]
+name = "pair-node"
+description = "HTTP servers (:1234 OpenAI, :11434 Ollama, :14318 node-info) that make a device a PAIR manual node"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+pair-protocol.workspace = true
+pair-engine.workspace = true
+pair-telemetry.workspace = true
+axum.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+tokio-stream.workspace = true
+futures.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+http.workspace = true
+bytes.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
