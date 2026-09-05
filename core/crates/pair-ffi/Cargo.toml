@@ -9,9 +9,18 @@ repository.workspace = true
 crate-type = ["cdylib", "staticlib", "lib"]
 name = "pair4droid_ffi"
 
+# The bindings generator ships as a binary of this crate (ADR-0002). It pulls in
+# clap + uniffi_bindgen, which have no business inside the cdylib we ship on the
+# phone, so it lives behind the `bindgen` feature. See README.md for the command.
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
 [features]
 default = []
 llama = ["pair-engine/llama"]
+bindgen = ["uniffi/cli"]
 
 [dependencies]
 pair-protocol.workspace = true
@@ -21,9 +30,14 @@ pair-node.workspace = true
 uniffi.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
+thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 parking_lot.workspace = true
 
-[build-dependencies]
-uniffi = { workspace = true, features = ["build"] }
+# No `[build-dependencies] uniffi` / build.rs: this crate is proc-macro mode
+# (`uniffi::setup_scaffolding!`), there is no UDL to compile.
+
+[dev-dependencies]
+reqwest.workspace = true
+serde_json.workspace = true
