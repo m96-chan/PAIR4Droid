@@ -35,7 +35,7 @@ cargo fmt --all
 cargo run -p pair-cli -- serve --mock demo   # run a mock node on 1234/11434/14318
 cargo run -p pair-cli -- probe 127.0.0.1     # replay PAIR's manual-node probe
 cargo test -p pair-engine --features llama   # llama.cpp backend (needs cmake; GGUF via PAIR4DROID_TEST_GGUF)
-cd ../android && ./gradlew assembleDebug     # needs Android SDK + NDK + cargo-ndk (CI does this)
+cd ../android && ./gradlew assembleDebug     # needs Android SDK + NDK + cmake + cargo-ndk (CI does this)
 ```
 
 When several agents build concurrently, set `CARGO_TARGET_DIR=core/target-<yourname>`

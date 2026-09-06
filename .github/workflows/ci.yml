@@ -44,8 +44,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: "aarch64-linux-android, x86_64-linux-android" }
       - uses: Swatinem/rust-cache@v2
-        with: { workspaces: core, key: android }
+        with: { workspaces: core, key: android-llama }
       - run: cargo install cargo-ndk
+      - run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
       - name: Build APK
         working-directory: android
         env:

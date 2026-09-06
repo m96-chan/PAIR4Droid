@@ -18,10 +18,23 @@ val cargoTargetDir: File =
 
 val uniffiLibraryFile: File = cargoTargetDir.resolve("aarch64-linux-android/release/libpair4droid_ffi.so")
 
+// Must match `android.defaultConfig.minSdk` below. Passed to cargo-ndk as `--platform`
+// so both the Rust target and llama.cpp's CMake build compile against this API level:
+// cargo-ndk's default (21) predates bionic's `posix_madvise` (API 23), which
+// llama.cpp's mmap loader needs (ticket #20).
+val minSdkVersion = 29
+
 // `cargoBuild` cross-compiles the pair-ffi cdylib for the ABIs this variant needs.
 // Kept as a single (non-variant-aware) task for simplicity: it always builds arm64-v8a,
 // and additionally builds x86_64 (for the emulator) unless the requested tasks look
 // release-only. CI only ever runs `assembleDebug`, so both ABIs are built there.
+//
+// `--features llama` compiles llama.cpp (via `llama-cpp-2`) into the cdylib, so the APK
+// runs real GGUF models; it needs cmake plus the NDK (`ANDROID_NDK_HOME`). libc++ is
+// linked statically on Android (see core/crates/pair-engine/Cargo.toml), so no
+// `libc++_shared.so` has to be packaged. Set `-Ppair4droid.mockOnly=true` to skip the
+// llama.cpp build for a quick UI-only iteration (the node then only serves the
+// `phone-demo` mock model of debug builds).
 val cargoBuild = tasks.register<Exec>("cargoBuild") {
     group = "pair4droid"
     description = "Cross-compiles the pair-ffi cdylib for Android via cargo-ndk."
@@ -30,10 +43,12 @@ val cargoBuild = tasks.register<Exec>("cargoBuild") {
     val releaseOnly = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) } &&
         gradle.startParameter.taskNames.none { it.contains("Debug", ignoreCase = true) }
     val abis = if (releaseOnly) listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64")
+    val mockOnly = (project.findProperty("pair4droid.mockOnly") as String?)?.toBoolean() == true
 
-    val cargoArgs = mutableListOf("ndk")
+    val cargoArgs = mutableListOf("ndk", "--platform", minSdkVersion.toString())
     abis.forEach { cargoArgs += listOf("-t", it) }
     cargoArgs += listOf("-o", file("src/main/jniLibs").path, "build", "--release", "-p", "pair-ffi")
+    if (!mockOnly) cargoArgs += listOf("--features", "llama")
     commandLine(listOf("cargo") + cargoArgs)
 }
 
@@ -65,7 +80,7 @@ android {
 
     defaultConfig {
         applicationId = "com.pair4droid"
-        minSdk = 29
+        minSdk = minSdkVersion
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
