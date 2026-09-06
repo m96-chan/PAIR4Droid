@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -185,6 +186,7 @@ private fun RenameDialog(
     onConfirm: (String) -> Unit,
 ) {
     var text by remember { mutableStateOf(currentName) }
+    val example = remember(currentName) { uniqueNameExample(currentName) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Rename model") },
@@ -192,7 +194,7 @@ private fun RenameDialog(
             Column {
                 Text(
                     "This name is PAIR's exact-match routing key across your fleet — keep it " +
-                        "unique, e.g. \"phone-$currentName\".",
+                        "unique, e.g. \"$example\".",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -248,4 +250,15 @@ private suspend fun importModel(
             }
         }
     }
+}
+
+/**
+ * Example of a fleet-unique name for the hint in [RenameDialog]: the device model as a
+ * prefix (`nx769j-qwen2.5-…`), replacing a generic `phone-` prefix the file may already
+ * carry instead of stacking another one on top (issue #25).
+ */
+internal fun uniqueNameExample(currentName: String, deviceModel: String = Build.MODEL): String {
+    val prefix = deviceModel.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "phone" }
+    val stem = currentName.removePrefix("phone-").removePrefix("$prefix-")
+    return "$prefix-$stem"
 }
