@@ -293,3 +293,81 @@ fn poll_pushes_state_changes_to_the_listener() {
 
     pair_node_stop().expect("stop");
 }
+
+// ------------------------------------------------------------------ #24
+
+/// The Models screen calls `setModelsDir` after every import/rename/delete
+/// and expects the *running* node to pick the change up. That means a restart
+/// in place: Kotlin sees `running:false` then `running:true`, and the lanes
+/// answer again afterwards (ticket #24).
+#[test]
+fn set_models_dir_while_running_restarts_the_node() {
+    let _g = guard();
+    let recorder = record();
+    let dir = std::env::temp_dir().join(format!("pair4droid-ffi-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let before = pair_node_start(config()).expect("start");
+    recorder.states.lock().clear();
+
+    pair_node_set_models_dir(dir.to_string_lossy().to_string());
+
+    assert!(
+        wait_until(Duration::from_secs(5), || {
+            let states = recorder.states.lock();
+            let stopped = states.iter().position(|s| !s.running);
+            let restarted = states.iter().rposition(|s| s.running);
+            matches!((stopped, restarted), (Some(a), Some(b)) if a < b)
+        }),
+        "listener must see running:false then running:true, got {:?}",
+        recorder.states.lock().iter().map(|s| s.running).collect::<Vec<_>>()
+    );
+
+    let after = pair_node_status();
+    assert!(after.running, "{after:?}");
+    let ports = after.ports.expect("ports after restart");
+    assert_eq!(get(ports.ollama, "/").0, 200);
+    assert!(get(ports.openai, "/v1/models").1.contains(MODEL));
+    // The old listeners are gone (port 0 binds are effectively unique per bind).
+    assert!(before.ports.is_some());
+}
+
+/// With a real backend the point of the restart is the catalogue: a GGUF that
+/// appears in or disappears from the directory must be reflected in
+/// `list_models` and `/v1/models` without Kotlin calling stop/start.
+#[cfg(feature = "llama")]
+#[test]
+#[ignore = "needs PAIR4DROID_TEST_GGUF"]
+fn set_models_dir_while_running_rescans_the_llama_catalogue() {
+    let Some(gguf) = std::env::var_os("PAIR4DROID_TEST_GGUF").map(std::path::PathBuf::from) else {
+        return;
+    };
+    let _g = guard();
+    let dir = std::env::temp_dir().join(format!("pair4droid-ffi-llama-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let mut cfg = config();
+    cfg.mock_models.clear();
+    pair_node_set_models_dir(dir.to_string_lossy().to_string());
+    pair_node_start(cfg).expect("start with an empty catalogue");
+    assert!(pair_node_list_models().is_empty());
+
+    // Import (a hard link avoids copying a large file).
+    let name = "phone-test-import";
+    std::fs::hard_link(&gguf, dir.join(format!("{name}.gguf")))
+        .or_else(|_| std::fs::copy(&gguf, dir.join(format!("{name}.gguf"))).map(|_| ()))
+        .unwrap();
+    pair_node_set_models_dir(dir.to_string_lossy().to_string());
+    assert_eq!(pair_node_list_models().iter().map(|m| m.name.as_str()).collect::<Vec<_>>(), vec![name]);
+    let ports = pair_node_status().ports.unwrap();
+    assert!(get(ports.openai, "/v1/models").1.contains(name));
+
+    // Delete.
+    std::fs::remove_file(dir.join(format!("{name}.gguf"))).unwrap();
+    pair_node_set_models_dir(dir.to_string_lossy().to_string());
+    assert!(pair_node_list_models().is_empty());
+    let ports = pair_node_status().ports.unwrap();
+    assert!(!get(ports.openai, "/v1/models").1.contains(name));
+    let _ = std::fs::remove_dir_all(&dir);
+}

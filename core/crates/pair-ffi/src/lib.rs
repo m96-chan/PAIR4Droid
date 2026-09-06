@@ -211,6 +211,9 @@ struct State {
     runtime: tokio::runtime::Runtime,
     running: Option<Running>,
     models_dir: Option<PathBuf>,
+    /// Config of the last successful `pair_node_start`, so `set_models_dir`
+    /// can restart the node in place with the same lanes/uuid (ticket #24).
+    config: Option<NodeConfig>,
     /// Last signals pushed from Kotlin; re-applied to a freshly started node so
     /// signals that arrived while stopped are not lost.
     signals: ExternalSignals,
@@ -230,6 +233,7 @@ fn state() -> &'static Mutex<State> {
             runtime,
             running: None,
             models_dir: None,
+            config: None,
             signals: ExternalSignals::default(),
             last_error: None,
         })
@@ -411,19 +415,29 @@ fn start_locked(state: &mut State, config: NodeConfig) -> Result<NodeStatus, Pai
     state.runtime.spawn(poll_loop(Arc::clone(&engine), ports, initial, poll_rx));
 
     state.last_error = None;
+    state.config = Some(config);
     state.running = Some(Running { handle, ports, engine, telemetry, poll_stop });
     Ok(snapshot(state))
+}
+
+/// Shut the running node down (no-op when stopped). Shared by `pair_node_stop`
+/// and the in-place restart in `pair_node_set_models_dir`.
+fn stop_locked(state: &mut State) -> bool {
+    let Some(running) = state.running.take() else {
+        return false;
+    };
+    let _ = running.poll_stop.send(true);
+    state.runtime.block_on(running.handle.shutdown());
+    true
 }
 
 /// Stop the three lanes and free the ports. [`PairError::NotRunning`] if stopped.
 #[uniffi::export]
 pub fn pair_node_stop() -> Result<(), PairError> {
     let mut state = state().lock();
-    let Some(running) = state.running.take() else {
+    if !stop_locked(&mut state) {
         return Err(PairError::NotRunning);
-    };
-    let _ = running.poll_stop.send(true);
-    state.runtime.block_on(running.handle.shutdown());
+    }
     let status = snapshot(&state);
     drop(state);
     emit_state(&status);
@@ -447,11 +461,38 @@ pub fn pair_node_push_signals(signals: ExternalSignals) {
     }
 }
 
-/// Where `*.gguf` files live. Takes effect on the next start; the Models screen
-/// sees it immediately through [`pair_node_list_models`].
+/// Where `*.gguf` files live. While stopped it is remembered for the next
+/// start. While running, the node is restarted in place with the config from
+/// the last `pair_node_start` so the engine re-reads the directory: Kotlin calls
+/// this after every import/rename/delete and PAIR must see the new catalogue
+/// (ticket #24). The listener observes `running:false` then `running:true`;
+/// a failed restart leaves the node stopped with `last_error` set.
 #[uniffi::export]
 pub fn pair_node_set_models_dir(path: String) {
-    state().lock().models_dir = Some(PathBuf::from(path));
+    let mut state = state().lock();
+    state.models_dir = Some(PathBuf::from(path));
+    if state.running.is_none() {
+        return;
+    }
+    let Some(config) = state.config.clone() else {
+        return;
+    };
+
+    stop_locked(&mut state);
+    let stopped = snapshot(&state);
+    let restarted = match start_locked(&mut state, config) {
+        Ok(status) => status,
+        Err(err) => {
+            tracing::error!(error = %err, "pair-ffi: restart after models-dir change failed");
+            state.last_error = Some(err.to_string());
+            snapshot(&state)
+        }
+    };
+    // Same discipline as `pair_node_start`: never call the listener with the
+    // state lock held (Kotlin's callback may call back into `status()`).
+    drop(state);
+    emit_state(&stopped);
+    emit_state(&restarted);
 }
 
 /// The running engine's catalogue, or — while stopped — a scan of the models
