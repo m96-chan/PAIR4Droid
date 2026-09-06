@@ -2,7 +2,8 @@
 //!
 //! Design contract
 //! - [`Sampler`] reads raw counters. `ProcfsSampler` (Linux/Android: `/proc/stat`,
-//!   `/proc/meminfo`) is the default; tests inject a `FakeSampler`.
+//!   `/proc/meminfo`; `/proc/self/stat` where SELinux denies `/proc/stat`) is the
+//!   default; tests inject a `FakeSampler`.
 //! - [`ExternalSignals`] is what the Android layer pushes in (battery %, charging,
 //!   thermal status, screen state). It is *not* sampled by Rust.
 //! - [`InferenceLoad`] is what `pair-node` pushes in from `Engine::status()`.
@@ -26,13 +27,17 @@ pub mod procfs;
 
 use pair_protocol::node_info::{CpuInfo, GpuInfo, MemoryInfo, NodeInfoResponse};
 use parking_lot::Mutex;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RawCpuSample {
-    /// Jiffies spent busy (user+nice+system+irq+softirq+steal).
+    /// Ticks spent busy (user+nice+system+irq+softirq+steal). Only deltas
+    /// between consecutive samples are used, so the unit just has to match `total`.
     pub busy: u64,
-    /// Jiffies total (busy + idle + iowait).
+    /// Ticks total (busy + idle + iowait; or wall-clock × cores for a
+    /// process-scoped sampler).
     pub total: u64,
     pub cores: u32,
     pub model_name: String,
@@ -384,17 +389,77 @@ pub fn pair_pressure_band_with_previous(utilization_percent: u32, previous_band:
 }
 
 /// Linux/Android `/proc` based sampler.
-pub struct ProcfsSampler;
+///
+/// `cpu()` reads the system-wide `/proc/stat`. Android's SELinux policy denies
+/// that file (and `/proc/loadavg`, `/proc/uptime`) to untrusted apps, so when
+/// it is unreadable the sampler falls back to a *process-scoped* sample:
+/// `busy` = this process's `utime + stime` from `/proc/self/stat`, `total` =
+/// wall-clock ticks since the sampler was created × online cores. For a node
+/// whose only job is inference that is an honest `cpu.utilization_percent`,
+/// and it still yields the two samples `Telemetry` needs for
+/// `telemetryValid:true` (ticket #22).
+pub struct ProcfsSampler {
+    stat_path: PathBuf,
+    epoch: Instant,
+    fallback_logged: AtomicBool,
+}
+
+/// Linux user-space clock tick rate: `/proc/*/stat` times are reported in
+/// `USER_HZ`, which is 100 on every architecture Android or a desktop Linux
+/// target (`include/asm-generic/param.h`), independent of the kernel's
+/// `CONFIG_HZ`. Also what `getconf CLK_TCK` prints on the test device.
+const USER_HZ: u64 = 100;
+
+impl Default for ProcfsSampler {
+    fn default() -> Self {
+        Self::with_stat_path(PathBuf::from("/proc/stat"))
+    }
+}
+
+impl ProcfsSampler {
+    /// Same as [`Default`], but reads the system-wide counters from `stat_path`
+    /// instead of `/proc/stat`. Tests point this at an unreadable path to
+    /// exercise the process-scoped fallback.
+    pub fn with_stat_path(stat_path: PathBuf) -> Self {
+        Self { stat_path, epoch: Instant::now(), fallback_logged: AtomicBool::new(false) }
+    }
+
+    fn model_name() -> String {
+        // Best-effort: a missing/unreadable /proc/cpuinfo must never fail the
+        // whole sample, only leave the model name empty.
+        std::fs::read_to_string("/proc/cpuinfo")
+            .map(|s| procfs::parse_cpuinfo_model_name(&s))
+            .unwrap_or_default()
+    }
+
+    fn process_scoped_cpu(&self, stat_err: std::io::Error) -> std::io::Result<RawCpuSample> {
+        let self_stat = std::fs::read_to_string("/proc/self/stat")?;
+        let busy = procfs::parse_self_stat(&self_stat)?;
+        let cores = std::thread::available_parallelism().map(|n| n.get() as u32).unwrap_or(1);
+        let wall_ticks = self.epoch.elapsed().as_millis() as u64 * USER_HZ / 1000;
+        if !self.fallback_logged.swap(true, Ordering::Relaxed) {
+            tracing::info!(
+                path = %self.stat_path.display(),
+                error = %stat_err,
+                "pair-telemetry: system-wide cpu stats unreadable; reporting this process's cpu time instead"
+            );
+        }
+        Ok(RawCpuSample {
+            busy,
+            total: wall_ticks.saturating_mul(u64::from(cores)),
+            cores,
+            model_name: String::new(),
+        })
+    }
+}
 
 impl Sampler for ProcfsSampler {
     fn cpu(&self) -> std::io::Result<RawCpuSample> {
-        let stat = std::fs::read_to_string("/proc/stat")?;
-        let mut sample = procfs::parse_stat(&stat)?;
-        // Best-effort: a missing/unreadable /proc/cpuinfo must never fail the
-        // whole sample, only leave the model name empty.
-        if let Ok(cpuinfo) = std::fs::read_to_string("/proc/cpuinfo") {
-            sample.model_name = procfs::parse_cpuinfo_model_name(&cpuinfo);
-        }
+        let mut sample = match std::fs::read_to_string(&self.stat_path) {
+            Ok(stat) => procfs::parse_stat(&stat)?,
+            Err(err) => self.process_scoped_cpu(err)?,
+        };
+        sample.model_name = Self::model_name();
         Ok(sample)
     }
 
