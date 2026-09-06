@@ -384,7 +384,7 @@ fn start_locked(state: &mut State, config: NodeConfig) -> Result<NodeStatus, Pai
             config.accelerator_name.clone(),
             config.model_budget_bytes,
         ),
-        Box::new(ProcfsSampler),
+        Box::new(ProcfsSampler::default()),
     ));
     telemetry.set_external(state.signals.clone().into());
 

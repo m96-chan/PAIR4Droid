@@ -10,7 +10,8 @@ permissions, UI, and model file management only — see `../CLAUDE.md` and
 - JDK 17
 - Android SDK: `platforms;android-36`, `build-tools;36.0.0`
 - Android NDK `27.2.12479018` (`sdkmanager "ndk;27.2.12479018"`), with `ANDROID_NDK_HOME`
-  pointing at it
+  pointing at it (NDK 29 works too)
+- `cmake` ≥ 3.14 on the PATH — llama.cpp is built into the app's native library
 - Rust with the Android target: `rustup target add aarch64-linux-android`
   (add `x86_64-linux-android` too if you want to run on the emulator)
 - `cargo install cargo-ndk`
@@ -28,8 +29,14 @@ cd android
 `assembleDebug` depends on two Exec tasks defined in `app/build.gradle.kts` that run before
 Kotlin compilation:
 
-1. **`cargoBuild`** — cross-compiles `pair-ffi` to `arm64-v8a` (+ `x86_64` for debug builds)
-   via `cargo ndk`, writing `.so`s straight into `app/src/main/jniLibs/`.
+1. **`cargoBuild`** — cross-compiles `pair-ffi` with `--features llama` to `arm64-v8a`
+   (+ `x86_64` for debug builds) via `cargo ndk --platform 29`, writing `.so`s straight
+   into `app/src/main/jniLibs/`. The platform must match `minSdk`: llama.cpp's mmap
+   loader needs `posix_madvise`, which bionic only exposes from API 23, and cargo-ndk
+   would otherwise default to 21. libc++ is linked statically on Android
+   (`core/crates/pair-engine/Cargo.toml`), so the APK carries a single native library
+   and no `libc++_shared.so`. `./gradlew assembleDebug -Ppair4droid.mockOnly=true` skips
+   the llama.cpp build for a quick UI-only iteration.
 2. **`generateUniffiBindings`** — runs pair-ffi's `uniffi-bindgen` binary against the built
    `libpair4droid_ffi.so` to generate the Kotlin bindings under
    `app/build/generated/uniffi/`, which is added as a Kotlin source directory.
@@ -37,32 +44,12 @@ Kotlin compilation:
 Both read `CARGO_TARGET_DIR` if you've set it (see the root `CLAUDE.md` note about running
 several agents against `core/` concurrently).
 
-### The `uniffi-bindgen` binary doesn't exist yet
-
-As of this writing `core/crates/pair-ffi` is still a stub (see its `src/lib.rs` doc comment)
-and has no `src/bin/uniffi-bindgen.rs`. Once pair-ffi is implemented it's expected to ship
-that binary (the standard UniFFI 0.32 proc-macro-mode pattern), and `generateUniffiBindings`
-will work as written above. Until then, to iterate on the Kotlin side by hand:
-
-```bash
-cd core
-cargo build -p pair-ffi --release   # or `cargo ndk ... build --release -p pair-ffi`
-cargo install uniffi-bindgen-cli --version 0.32   # match the workspace's `uniffi` version
-uniffi-bindgen generate \
-  --library target/release/libpair4droid_ffi.so \
-  --language kotlin \
-  --out-dir ../android/app/build/generated/uniffi
-```
-
-This app's Kotlin code imports the generated bindings from package `uniffi.pair_ffi`
-(UniFFI's default namespace for a crate named `pair-ffi`) — confirm this matches once the
-crate is implemented; see the "assumptions" list below.
-
 ## Running
 
 Install the debug APK on a device on the same LAN/Wi-Fi as your PAIR host, launch it, and
 flip the switch on the Node tab. With no `.gguf` files imported yet, debug builds fall back
-to a `phone-demo` mock model (`BuildConfig.MOCK_MODELS`) so the node still comes up.
+to a `phone-demo` mock model (`BuildConfig.MOCK_MODELS`) so the node still comes up; once
+a `.gguf` is imported the node serves it with llama.cpp (CPU, mmap, one request at a time).
 
 ## Adding the node in PAIR
 

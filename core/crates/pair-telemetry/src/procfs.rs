@@ -97,6 +97,34 @@ pub fn parse_cpuinfo_model_name(s: &str) -> String {
     model_name.or(hardware).unwrap_or("").to_string()
 }
 
+/// Parses the CPU time this process has consumed out of `/proc/self/stat`:
+/// `utime + stime` (fields 14 and 15, in `USER_HZ` clock ticks).
+///
+/// The second field (`comm`) is the executable name in parentheses and may
+/// itself contain spaces and parentheses, so everything is parsed from the
+/// *last* `)` onwards (`man 5 proc`). Used by [`super::ProcfsSampler`] when
+/// `/proc/stat` is unreadable — Android's SELinux policy denies it to
+/// untrusted apps (ticket #22).
+pub fn parse_self_stat(s: &str) -> io::Result<u64> {
+    let rest = s
+        .rfind(')')
+        .map(|i| &s[i + 1..])
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no '(comm)' field in /proc/self/stat"))?;
+
+    // After `comm`: state(3) ppid(4) pgrp(5) session(6) tty_nr(7) tpgid(8)
+    // flags(9) minflt(10) cminflt(11) majflt(12) cmajflt(13) utime(14) stime(15).
+    let mut fields = rest.split_whitespace().skip(11);
+    let mut tick = || -> io::Result<u64> {
+        fields
+            .next()
+            .and_then(|f| f.parse::<u64>().ok())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "short or malformed /proc/self/stat"))
+    };
+    let utime = tick()?;
+    let stime = tick()?;
+    Ok(utime + stime)
+}
+
 /// Parses `MemTotal`/`MemAvailable` out of `/proc/meminfo` (values are in kB,
 /// converted here to bytes).
 pub fn parse_meminfo(s: &str) -> io::Result<RawMemSample> {
@@ -249,6 +277,28 @@ Cached:          1653092 kB
     #[test]
     fn parse_meminfo_rejects_missing_fields() {
         let err = parse_meminfo("MemFree: 100 kB\n").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    // Verbatim `/proc/self/stat` captured on a Nubia NX769J (Android 16) via
+    // `run-as com.pair4droid head -c 300 /proc/self/stat` — ticket #22.
+    const ANDROID_SELF_STAT: &str = "2354 (head) R 21774 2354 2354 0 -1 4194560 1405 0 0 0 3 3 0 0 20 0 1 0 29270710 11034234880 1228 18446744073709551615 380977168384 380977507680 549672999664 0 0 0 0 0 1073775864 0 0 0 17 6 0 0 0 0 0 380977545216 380977556520 381435969536 549673002826 549673002854 549673002854 549673009127 0\n";
+
+    #[test]
+    fn parses_self_stat_utime_plus_stime() {
+        // utime = 3, stime = 3 (fields 14 and 15).
+        assert_eq!(parse_self_stat(ANDROID_SELF_STAT).unwrap(), 6);
+    }
+
+    #[test]
+    fn parse_self_stat_survives_spaces_and_parens_in_comm() {
+        let line = "42 (my (weird) proc) S 1 42 42 0 -1 4194560 0 0 0 0 120 30 0 0 20 0 1 0 1 1 1 1\n";
+        assert_eq!(parse_self_stat(line).unwrap(), 150);
+    }
+
+    #[test]
+    fn parse_self_stat_rejects_short_line() {
+        let err = parse_self_stat("1 (x) S 1 2 3\n").unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 }

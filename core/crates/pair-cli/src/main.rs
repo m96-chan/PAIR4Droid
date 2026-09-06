@@ -140,7 +140,7 @@ async fn run_serve(args: ServeArgs) -> Result<()> {
 
     let telemetry_config = TelemetryConfig::default_for(host_uuid, args.accelerator_name, model_budget_bytes);
     let telemetry: Arc<dyn TelemetrySource> =
-        Arc::new(Telemetry::new(telemetry_config, Box::new(ProcfsSampler)));
+        Arc::new(Telemetry::new(telemetry_config, Box::new(ProcfsSampler::default())));
 
     let node_config = NodeConfig {
         bind: args.bind,
